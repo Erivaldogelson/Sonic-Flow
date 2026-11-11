@@ -7,11 +7,11 @@ object SonicLocale {
     data class Language(val id: String, val label: String, val locale: String?)
     val languages = listOf(
         Language("system", "System language", null),
-        Language("pt-BR", "Portuguese (Brazil)", "pt-BR"),
-        Language("pt-AO", "Portuguese (Angola)", "pt-AO"),
-        Language("pt-CV", "Portuguese (Cape Verde)", "pt-CV"),
-        Language("pt-MZ", "Portuguese (Mozambique)", "pt-MZ"),
-        Language("kea", "Cape Verdean Creole", "kea"),
+        Language("pt-BR", "Português (Brasil)", "pt-BR"),
+        Language("pt-AO", "Português (Angola)", "pt-AO"),
+        Language("pt-CV", "Português (Cabo Verde)", "pt-CV"),
+        Language("pt-MZ", "Português (Moçambique)", "pt-MZ"),
+        Language("kea", "Kriolu", "kea"),
         Language("en", "English", "en"), Language("zh", "中文", "zh-CN"),
         Language("ko", "한국어", "ko"), Language("ja", "日本語", "ja"),
         Language("ru", "Русский", "ru"), Language("af", "Afrikaans", "af"),
@@ -20,8 +20,9 @@ object SonicLocale {
     fun selected(context: Context): String = context.getSharedPreferences("sonicflow", Context.MODE_PRIVATE).getString("app_language", "system") ?: "system"
     fun text(context: Context, source: String): String {
         val id = selected(context)
-        if (id == "system" || id.startsWith("pt-")) return source
-        val language = languages.firstOrNull { it.id == id }?.locale?.substringBefore('-') ?: "en"
+        val language = if (id == "system") context.resources.configuration.locales[0].language
+            else languages.firstOrNull { it.id == id }?.locale?.substringBefore('-') ?: "en"
+        if (language == "pt") return source
         return additionalTranslations[language]?.get(source) ?: translations[language]?.get(source) ?: source
     }
     private val additionalTranslations = mapOf("en" to mapOf(
@@ -31,7 +32,59 @@ object SonicLocale {
         "PIX • Brasil" to "PIX • Brazil", "IBAN • Europa" to "IBAN • Europe",
         "SWIFT • Estados Unidos" to "SWIFT • United States", "Ajustar áudio" to "Modify audio settings",
         "Acesso à internet e serviço em segundo plano" to "Internet and background service access",
-        "Desconectado" to "Disconnected"
+        "Desconectado" to "Disconnected", "Live notifications" to "Live notifications",
+        "Controles ANC na Now Bar enquanto o fone estiver conectado" to "ANC controls in the Now Bar while the headphones are connected",
+        "Adaptar ao Material You" to "Match Material You", "Usar a cor dinâmica do sistema na Now Bar" to "Use the system dynamic color in the Now Bar",
+        "Conectado" to "Connected", "Fone conectado" to "Headphones connected", "Cena ANC" to "ANC mode",
+        "Intensidade" to "Strength", "Redução de ruído" to "Noise reduction", "Deslocamento" to "Commute",
+        "Ambiente interno" to "Indoor", "Redução de vento" to "Wind reduction", "Adaptativo" to "Adaptive",
+        "System language" to "System language", "Portuguese (Brazil)" to "Portuguese (Brazil)",
+        "Portuguese (Angola)" to "Portuguese (Angola)", "Portuguese (Cape Verde)" to "Portuguese (Cape Verde)",
+        "Portuguese (Mozambique)" to "Portuguese (Mozambique)", "Cape Verdean Creole" to "Cape Verdean Creole",
+        "English" to "English", "Kimbundu" to "Kimbundu", "Fone conectado. Cancelamento de ruído" to "Headphones connected. Noise cancellation",
+        "Fone conectado" to "Headphones connected", "Pop-up" to "Pop-up", "Ajuste o som" to "Tune your sound",
+        "Cena ANC" to "ANC mode", "Intensidade" to "Strength", "Redução de ruído" to "Noise reduction",
+        "Deslocamento" to "Commute", "Ambiente interno" to "Indoor", "Redução de vento" to "Wind reduction", "Adaptativo" to "Adaptive",
+        "Perfis de som" to "Sound profiles", "O sistema não disponibilizou bandas de equalização." to "The system did not provide equalizer bands.",
+        "Equalizador indisponível neste aparelho" to "Equalizer unavailable on this device",
+        "Neutro" to "Neutral", "Graves" to "Bass", "Voz" to "Voice", "Clássico" to "Classical", "Agudos" to "Treble",
+        "Os ajustes ficam salvos neste aparelho e aplicados ao áudio do sistema enquanto o SonicFlow estiver aberto." to "Settings are saved on this device and applied to system audio while SonicFlow is open.",
+        "QCY H3 branco em vista 3D" to "White QCY H3 headphones in 3D view",
+        "Permissão de conexão Bluetooth necessária" to "Bluetooth connection permission required",
+        "Permissão Bluetooth necessária" to "Bluetooth permission required", "Bluetooth indisponível" to "Bluetooth unavailable",
+        "Pronto para conectar" to "Ready to connect", "Desconectado" to "Disconnected", "QCY H3 desconectado" to "QCY H3 disconnected",
+        "Não foi possível abrir os serviços Bluetooth do fone" to "Could not open the headphone Bluetooth services",
+        "Protocolo do dispositivo não reconhecido" to "Unrecognized device protocol", "Canal de comandos QCY ausente" to "QCY command channel missing",
+        "Não foi possível ativar as notificações BLE do fone" to "Could not enable headphone BLE notifications",
+        "O fone recusou a ativação das notificações BLE" to "The headphones rejected BLE notifications",
+        "Não foi possível ativar as respostas do fone" to "Could not enable headphone responses",
+        "O QCY H3 recusou um comando Bluetooth" to "The QCY H3 rejected a Bluetooth command",
+        "O canal BLE recusou um comando" to "The BLE channel rejected a command",
+        "Conecte o QCY H3 para alterar o ANC" to "Connect the QCY H3 to change ANC",
+        "Conecte o QCY H3 para alterar o Modo Gamer" to "Connect the QCY H3 to change Game Mode",
+        "Comando do Modo Gamer enviado" to "Game Mode command sent",
+        "O canal de comandos do QCY H3 não aceita escrita" to "The QCY H3 command channel does not support writing"
+    ),
+    "zh" to mapOf(
+        "Ajustar áudio" to "调整音频", "Nome no pop-up" to "弹窗名称", "Deixe vazio para usar o nome salvo no Bluetooth." to "留空以使用蓝牙设备名称。", "Nome exibido" to "显示名称", "Concedida" to "已允许", "Não concedida" to "未允许", "Bluetooth e dispositivos próximos" to "蓝牙和附近设备", "Notificações" to "通知", "Sobre outros apps" to "显示在其他应用上层", "Meus fones" to "我的耳机", "Buscando" to "搜索中", "Desconectado" to "已断开连接", "Reconectar" to "重新连接", "Conecte o fone para enviar comandos ANC." to "连接耳机以发送降噪指令。", "Os modos são enviados diretamente pelo Bluetooth LE." to "模式通过蓝牙 LE 直接发送。", "Pop-up" to "弹窗", "Modo Gamer" to "游戏模式", "Reduz a latência do áudio" to "降低音频延迟", "Ativar automaticamente ao abrir um jogo" to "打开游戏时自动启用", "Requer acesso aos dados de uso" to "需要使用情况访问权限", "Sobre mim" to "关于我", "Minhas redes sociais" to "我的社交媒体", "Live notifications" to "实时通知", "Controles ANC na Now Bar enquanto o fone estiver conectado" to "耳机连接时在 Now Bar 中控制降噪", "Adaptar ao Material You" to "匹配 Material You", "Usar a cor dinâmica do sistema na Now Bar" to "在 Now Bar 中使用系统动态颜色", "Conectado" to "已连接", "Fone conectado" to "耳机已连接", "Cena ANC" to "降噪模式", "Intensidade" to "强度", "Redução de ruído" to "降噪", "Deslocamento" to "通勤", "Ambiente interno" to "室内", "Redução de vento" to "抗风噪", "Adaptativo" to "自适应", "System language" to "系统语言", "Portuguese (Brazil)" to "葡萄牙语（巴西）", "Portuguese (Angola)" to "葡萄牙语（安哥拉）", "Portuguese (Cape Verde)" to "葡萄牙语（佛得角）", "Portuguese (Mozambique)" to "葡萄牙语（莫桑比克）", "Cape Verdean Creole" to "佛得角克里奥尔语", "English" to "英语", "Kimbundu" to "金本杜语"
+    ),
+    "ko" to mapOf(
+        "Ajustar áudio" to "오디오 설정", "Nome no pop-up" to "팝업 이름", "Deixe vazio para usar o nome salvo no Bluetooth." to "비워 두면 Bluetooth에 저장된 이름을 사용합니다.", "Nome exibido" to "표시 이름", "Concedida" to "허용됨", "Não concedida" to "허용되지 않음", "Bluetooth e dispositivos próximos" to "Bluetooth 및 주변 기기", "Notificações" to "알림", "Sobre outros apps" to "다른 앱 위에 표시", "Meus fones" to "내 헤드폰", "Buscando" to "검색 중", "Desconectado" to "연결 끊김", "Reconectar" to "다시 연결", "Conecte o fone para enviar comandos ANC." to "ANC 명령을 보내려면 헤드폰을 연결하세요.", "Os modos são enviados diretamente pelo Bluetooth LE." to "모드는 Bluetooth LE를 통해 직접 전송됩니다.", "Pop-up" to "팝업", "Modo Gamer" to "게임 모드", "Reduz a latência do áudio" to "오디오 지연 시간 감소", "Ativar automaticamente ao abrir um jogo" to "게임을 열면 자동으로 켜기", "Requer acesso aos dados de uso" to "사용 정보 액세스가 필요합니다", "Sobre mim" to "내 정보", "Minhas redes sociais" to "내 소셜 미디어", "Live notifications" to "실시간 알림", "Controles ANC na Now Bar enquanto o fone estiver conectado" to "헤드폰 연결 중 Now Bar에서 ANC 제어", "Adaptar ao Material You" to "Material You 색상 사용", "Usar a cor dinâmica do sistema na Now Bar" to "Now Bar에 시스템 동적 색상 사용", "Conectado" to "연결됨", "Fone conectado" to "헤드폰 연결됨", "Cena ANC" to "ANC 모드", "Intensidade" to "강도", "Redução de ruído" to "소음 감소", "Deslocamento" to "이동", "Ambiente interno" to "실내", "Redução de vento" to "바람 소음 감소", "Adaptativo" to "적응형", "System language" to "시스템 언어", "Portuguese (Brazil)" to "포르투갈어(브라질)", "Portuguese (Angola)" to "포르투갈어(앙골라)", "Portuguese (Cape Verde)" to "포르투갈어(카보베르데)", "Portuguese (Mozambique)" to "포르투갈어(모잠비크)", "Cape Verdean Creole" to "카보베르데 크리올어", "English" to "영어", "Kimbundu" to "킴분두어"
+    ),
+    "ja" to mapOf(
+        "Ajustar áudio" to "オーディオ設定", "Nome no pop-up" to "ポップアップ名", "Deixe vazio para usar o nome salvo no Bluetooth." to "空欄の場合はBluetoothの名前を使用します。", "Nome exibido" to "表示名", "Concedida" to "許可済み", "Não concedida" to "未許可", "Bluetooth e dispositivos próximos" to "Bluetoothと付近のデバイス", "Notificações" to "通知", "Sobre outros apps" to "他のアプリの上に表示", "Meus fones" to "ヘッドホン", "Buscando" to "検索中", "Desconectado" to "未接続", "Reconectar" to "再接続", "Conecte o fone para enviar comandos ANC." to "ANCを操作するにはヘッドホンを接続してください。", "Os modos são enviados diretamente pelo Bluetooth LE." to "モードはBluetooth LEで直接送信されます。", "Pop-up" to "ポップアップ", "Modo Gamer" to "ゲームモード", "Reduz a latência do áudio" to "音声遅延を短縮", "Ativar automaticamente ao abrir um jogo" to "ゲーム起動時に自動で有効化", "Requer acesso aos dados de uso" to "使用状況へのアクセスが必要です", "Sobre mim" to "開発者について", "Minhas redes sociais" to "ソーシャルメディア", "Live notifications" to "ライブ通知", "Controles ANC na Now Bar enquanto o fone estiver conectado" to "ヘッドホン接続中にNow BarでANCを操作", "Adaptar ao Material You" to "Material Youに合わせる", "Usar a cor dinâmica do sistema na Now Bar" to "Now Barにシステムの動的カラーを使用", "Conectado" to "接続済み", "Fone conectado" to "ヘッドホン接続済み", "Cena ANC" to "ANCモード", "Intensidade" to "強度", "Redução de ruído" to "ノイズ低減", "Deslocamento" to "移動", "Ambiente interno" to "屋内", "Redução de vento" to "風切り音低減", "Adaptativo" to "自動", "System language" to "システム言語", "Portuguese (Brazil)" to "ポルトガル語（ブラジル）", "Portuguese (Angola)" to "ポルトガル語（アンゴラ）", "Portuguese (Cape Verde)" to "ポルトガル語（カーボベルデ）", "Portuguese (Mozambique)" to "ポルトガル語（モザンビーク）", "Cape Verdean Creole" to "カーボベルデ・クレオール語", "English" to "英語", "Kimbundu" to "キンブンド語"
+    ),
+    "ru" to mapOf(
+        "Ajustar áudio" to "Настройки звука", "Nome no pop-up" to "Имя во всплывающем окне", "Deixe vazio para usar o nome salvo no Bluetooth." to "Оставьте пустым, чтобы использовать имя Bluetooth.", "Nome exibido" to "Отображаемое имя", "Concedida" to "Разрешено", "Não concedida" to "Не разрешено", "Bluetooth e dispositivos próximos" to "Bluetooth и устройства поблизости", "Notificações" to "Уведомления", "Sobre outros apps" to "Поверх других приложений", "Meus fones" to "Мои наушники", "Buscando" to "Поиск", "Desconectado" to "Не подключено", "Reconectar" to "Подключить снова", "Conecte o fone para enviar comandos ANC." to "Подключите наушники для управления ANC.", "Os modos são enviados diretamente pelo Bluetooth LE." to "Режимы передаются напрямую через Bluetooth LE.", "Pop-up" to "Всплывающее окно", "Modo Gamer" to "Игровой режим", "Reduz a latência do áudio" to "Снижает задержку звука", "Ativar automaticamente ao abrir um jogo" to "Включать при запуске игры", "Requer acesso aos dados de uso" to "Требуется доступ к статистике использования", "Sobre mim" to "Обо мне", "Minhas redes sociais" to "Мои соцсети", "Live notifications" to "Текущие уведомления", "Controles ANC na Now Bar enquanto o fone estiver conectado" to "Управление ANC в Now Bar при подключённых наушниках", "Adaptar ao Material You" to "Цвет Material You", "Usar a cor dinâmica do sistema na Now Bar" to "Использовать системный динамический цвет в Now Bar", "Conectado" to "Подключено", "Fone conectado" to "Наушники подключены", "Cena ANC" to "Режим ANC", "Intensidade" to "Интенсивность", "Redução de ruído" to "Шумоподавление", "Deslocamento" to "В дороге", "Ambiente interno" to "В помещении", "Redução de vento" to "Подавление ветра", "Adaptativo" to "Адаптивный", "System language" to "Системный язык", "Portuguese (Brazil)" to "Португальский (Бразилия)", "Portuguese (Angola)" to "Португальский (Ангола)", "Portuguese (Cape Verde)" to "Португальский (Кабо-Верде)", "Portuguese (Mozambique)" to "Португальский (Мозамбик)", "Cape Verdean Creole" to "Креольский Кабо-Верде", "English" to "Английский", "Kimbundu" to "Кимбунду"
+    ),
+    "af" to mapOf(
+        "Live notifications" to "Regstreekse kennisgewings", "Controles ANC na Now Bar enquanto o fone estiver conectado" to "ANC-beheer in die Now Bar terwyl die oorfone gekoppel is", "Adaptar ao Material You" to "Pas by Material You aan", "Usar a cor dinâmica do sistema na Now Bar" to "Gebruik die stelsel se dinamiese kleur in die Now Bar", "Conectado" to "Gekoppel", "Fone conectado" to "Oorfone gekoppel", "Desligado" to "Af", "Transparência" to "Deursigtigheid", "Cancelamento de ruído" to "Geraaskansellasie", "System language" to "Stelseltaal", "Portuguese (Brazil)" to "Portugees (Brasilië)", "Portuguese (Angola)" to "Portugees (Angola)", "Portuguese (Cape Verde)" to "Portugees (Kaap Verde)", "Portuguese (Mozambique)" to "Portugees (Mosambiek)", "Cape Verdean Creole" to "Kaapverdiese Kreools", "English" to "Engels", "Kimbundu" to "Kimbundu"
+    ),
+    "kea" to mapOf(
+        "Live notifications" to "Notifikason en tenpu real", "Controles ANC na Now Bar enquanto o fone estiver conectado" to "Kontrolu ANC na Now Bar kuandu fones sta ligadu", "Adaptar ao Material You" to "Adapta pa Material You", "Usar a cor dinâmica do sistema na Now Bar" to "Uza kor dinamiku di sistema na Now Bar", "Conectado" to "Ligadu", "Fone conectado" to "Fones ligadu", "Desligado" to "Désliga", "Transparência" to "Transparénsia", "Cancelamento de ruído" to "Kanselamentu di barulhu", "System language" to "Língua di sistema", "Portuguese (Brazil)" to "Purtugês (Brasil)", "Portuguese (Angola)" to "Purtugês (Angola)", "Portuguese (Cape Verde)" to "Kriolu", "Portuguese (Mozambique)" to "Purtugês (Moçambiki)", "Cape Verdean Creole" to "Kriolu", "English" to "Inglês", "Kimbundu" to "Kimbundu"
+    ),
+    "kmb" to mapOf(
+        "Live notifications" to "Malongi a kyele", "Controles ANC na Now Bar enquanto o fone estiver conectado" to "Kutambulula ANC mu Now Bar kifoni kyakwatilile", "Adaptar ao Material You" to "Kusoba ku Material You", "Usar a cor dinâmica do sistema na Now Bar" to "Kusadila rangi ya sistema mu Now Bar", "Conectado" to "Kyakwatilile", "Fone conectado" to "Mafoni akwatilile", "Desligado" to "Kufwisa", "Transparência" to "Kumona mu kilu", "Cancelamento de ruído" to "Kusukula kwavulu", "System language" to "Kibekelo kya sistema", "Portuguese (Brazil)" to "Português (Brasil)", "Portuguese (Angola)" to "Português (Angola)", "Portuguese (Cape Verde)" to "Português (Cabo Verde)", "Portuguese (Mozambique)" to "Português (Moçambique)", "Cape Verdean Creole" to "Kriolu", "English" to "Inglês", "Kimbundu" to "Kimbundu"
     ))
     private val translations = mapOf(
         "en" to mapOf("Ajustes" to "Settings", "Sobre" to "About", "Nome no pop-up" to "Pop-up name", "Deixe vazio para usar o nome salvo no Bluetooth." to "Leave empty to use the Bluetooth name.", "Nome exibido" to "Display name", "Permissões" to "Permissions", "Idioma" to "Language", "Escolher idioma" to "Select language", "Idioma do sistema" to "System language", "Concedida" to "Allowed", "Não concedida" to "Not allowed", "Bluetooth e dispositivos próximos" to "Bluetooth and nearby devices", "Notificações" to "Notifications", "Sobre outros apps" to "Display over other apps", "Abrir configurações" to "Open settings", "SonicFlow" to "SonicFlow", "Meus fones" to "My headphones", "Som" to "Sound", "Fones" to "Headphones", "Conectar" to "Connect", "Reconectar" to "Reconnect", "Buscando" to "Searching", "Cancelamento de ruído" to "Noise cancellation", "Desligado" to "Off", "Transparência" to "Transparency", "Equalizador" to "Equalizer", "Ajuste o som" to "Tune your sound", "Pop-up" to "Pop-up", "Card Pop-up" to "Pop-up card", "Aviso ao trocar de dispositivo" to "Device switch alert", "Modo Gamer" to "Game mode", "Reduz a latência do áudio" to "Reduces audio latency", "Ativar automaticamente ao abrir um jogo" to "Turn on automatically when a game opens", "Pronto para conectar" to "Ready to connect", "Conecte o fone para enviar comandos ANC." to "Connect your headphones to send ANC commands.", "Os modos são enviados diretamente pelo Bluetooth LE." to "Modes are sent directly over Bluetooth LE.", "Sobre outros apps • parte inferior" to "Over other apps • bottom", "Toque para permitir sobreposição" to "Tap to allow overlay", "Áudio pausado neste celular" to "Audio paused on this phone", "Áudio retomado neste celular" to "Audio resumed on this phone"),

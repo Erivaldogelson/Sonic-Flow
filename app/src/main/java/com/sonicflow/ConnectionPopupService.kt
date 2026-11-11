@@ -11,6 +11,9 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Handler
@@ -28,6 +31,9 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toDrawable
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.ui.graphics.toArgb
 import coil.ImageLoader
 import coil.request.ImageRequest
 
@@ -41,6 +47,9 @@ class ConnectionPopupService : Service() {
     private var statusCardWindowManager: WindowManager? = null
     private var lastConnected = false
     private var latestState = QcyBleController.State()
+    private var liveNotificationImage: Bitmap? = null
+    private var liveNotificationImageLoading = false
+    private val imageLoader by lazy { ImageLoader(this) }
     private val handler = Handler(Looper.getMainLooper())
     private val hidePopup = Runnable { removePopup() }
     private var autoGameCommandSent = false
@@ -110,6 +119,7 @@ class ConnectionPopupService : Service() {
         controller = QcyBleController(this) { state ->
             latestState = state
             publishState(state)
+            updateLiveNotification(state)
             if (state.connected) getSharedPreferences("sonicflow", MODE_PRIVATE).edit().putBoolean("qcy_connected_here", true).apply()
             if (state.connected && !lastConnected) {
                 val prefs = getSharedPreferences("sonicflow", MODE_PRIVATE)
@@ -132,7 +142,8 @@ class ConnectionPopupService : Service() {
             ACTION_SCAN -> controller.connectKnownOrScan()
             ACTION_SET_MODE -> controller.setNoiseMode(intent.getIntExtra("mode", 2), intent.getIntExtra("scene", 0), intent.getIntExtra("strength", 0))
             ACTION_SET_GAME_MODE -> controller.setGameMode(intent.getBooleanExtra("enabled", false))
-            ACTION_HIDE_POPUP -> { removePopup(); removeStatusCard() }
+            ACTION_REFRESH_LIVE_NOTIFICATION -> { createNotificationChannels(); updateLiveNotification(latestState) }
+            ACTION_HIDE_POPUP -> { removePopup(); removeStatusCard(); updateLiveNotification(latestState) }
         }
         publishState(latestState)
         return START_STICKY
@@ -157,6 +168,89 @@ class ConnectionPopupService : Service() {
         if (Build.VERSION.SDK_INT >= 29) {
             ServiceCompat.startForeground(this, SERVICE_NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
         } else startForeground(SERVICE_NOTIFICATION_ID, notification)
+    }
+
+    private fun updateLiveNotification(state: QcyBleController.State) {
+        val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        val enabled = getSharedPreferences("sonicflow", MODE_PRIVATE).getBoolean("live_notifications", false)
+        if (!enabled || !state.connected || MainActivity.appIsVisible) {
+            manager.cancel(LIVE_NOTIFICATION_ID)
+            return
+        }
+        val productImage = liveNotificationImage
+        if (productImage == null && !liveNotificationImageLoading) {
+            liveNotificationImageLoading = true
+            val request = ImageRequest.Builder(this)
+                .data(H3_WHITE_IMAGE)
+                .allowHardware(false)
+                .target(onSuccess = { drawable ->
+                    liveNotificationImageLoading = false
+                    val bitmap = (drawable as? BitmapDrawable)?.bitmap ?: run {
+                        val rendered = Bitmap.createBitmap(drawable.intrinsicWidth.coerceAtLeast(1), drawable.intrinsicHeight.coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+                        drawable.setBounds(0, 0, rendered.width, rendered.height)
+                        drawable.draw(Canvas(rendered))
+                        rendered
+                    }
+                    val maxSide = (256 * resources.displayMetrics.density).toInt().coerceAtLeast(1)
+                    val scale = minOf(1f, maxSide.toFloat() / maxOf(bitmap.width, bitmap.height))
+                    liveNotificationImage = if (scale < 1f) Bitmap.createScaledBitmap(
+                        bitmap,
+                        (bitmap.width * scale).toInt().coerceAtLeast(1),
+                        (bitmap.height * scale).toInt().coerceAtLeast(1),
+                        true
+                    ) else bitmap
+                    if (latestState.connected && getSharedPreferences("sonicflow", MODE_PRIVATE).getBoolean("live_notifications", false)) {
+                        updateLiveNotification(latestState)
+                    }
+                }, onError = {
+                    liveNotificationImageLoading = false
+                })
+                .build()
+            imageLoader.enqueue(request)
+        }
+        val mode = when (state.ancMode) {
+            1 -> "ANC"
+            3 -> SonicLocale.text(this, "Transparência")
+            else -> SonicLocale.text(this, "Desligado")
+        }
+        val name = getSharedPreferences("sonicflow", MODE_PRIVATE).getString("popup_display_name", "")?.trim().orEmpty().ifBlank { state.deviceName }
+        fun modeAction(label: String, value: Int, scene: Int = 0, strength: Int = 0): NotificationCompat.Action {
+            val intent = Intent(this, ConnectionPopupService::class.java).setAction(ACTION_SET_MODE)
+                .putExtra("mode", value).putExtra("scene", scene).putExtra("strength", strength)
+            val pending = PendingIntent.getService(this, 3600 + value, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            return NotificationCompat.Action.Builder(android.R.drawable.ic_media_play, label, pending).build()
+        }
+        val prefs = getSharedPreferences("sonicflow", MODE_PRIVATE)
+        val liveColor = if (prefs.getBoolean("live_notifications_material_you", false) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val dark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+            if (dark) dynamicDarkColorScheme(this).primary.toArgb() else dynamicLightColorScheme(this).primary.toArgb()
+        } else Color.rgb(126, 87, 194)
+        val openApp = PendingIntent.getActivity(
+            this,
+            LIVE_NOTIFICATION_ID,
+            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(this, CHANNEL_LIVE)
+            .setSmallIcon(R.drawable.ic_headphones_notification)
+            .setColor(liveColor)
+            .setContentTitle(name)
+            .setContentText("${SonicLocale.text(this, "Conectado")} • $mode")
+            .setContentIntent(openApp)
+            .setSubText(SonicLocale.text(this, "SonicFlow"))
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setShowWhen(false)
+            .setRequestPromotedOngoing(true)
+            .setShortCriticalText(mode)
+            .apply { if (productImage != null) setLargeIcon(productImage) }
+            .setStyle(NotificationCompat.BigTextStyle().bigText("${SonicLocale.text(this, "Fone conectado")}. ${SonicLocale.text(this, "Cancelamento de ruído")}: $mode."))
+            .addAction(modeAction(SonicLocale.text(this, "Desligado"), 2))
+            .addAction(modeAction("ANC", 1, state.ancScene, state.ancStrength))
+            .addAction(modeAction(SonicLocale.text(this, "Transparência"), 3, 1, 4))
+            .build()
+        manager.notify(LIVE_NOTIFICATION_ID, notification)
     }
 
     private fun showConnectionPopup(name: String, battery: Int?, charging: Boolean) {
@@ -345,6 +439,7 @@ class ConnectionPopupService : Service() {
             val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(NotificationChannel(CHANNEL_SERVICE, "Monitoramento Bluetooth", NotificationManager.IMPORTANCE_LOW))
             manager.createNotificationChannel(NotificationChannel(CHANNEL_POPUP, "Conexão dos fones", NotificationManager.IMPORTANCE_HIGH))
+            manager.createNotificationChannel(NotificationChannel(CHANNEL_LIVE, SonicLocale.text(this, "Live notifications"), NotificationManager.IMPORTANCE_DEFAULT))
         }
     }
 
@@ -396,11 +491,14 @@ class ConnectionPopupService : Service() {
         const val ACTION_GET_STATE = "com.sonicflow.action.GET_STATE"
         const val ACTION_HIDE_POPUP = "com.sonicflow.action.HIDE_POPUP"
         const val ACTION_STATE = "com.sonicflow.action.STATE"
+        const val ACTION_REFRESH_LIVE_NOTIFICATION = "com.sonicflow.action.REFRESH_LIVE_NOTIFICATION"
         const val CHANNEL_SERVICE = "sonicflow_monitor"
         const val CHANNEL_POPUP = "sonicflow_popup"
+        const val CHANNEL_LIVE = "sonicflow_live"
         const val SERVICE_NOTIFICATION_ID = 3501
         const val POPUP_NOTIFICATION_ID = 3502
         const val STATUS_CARD_NOTIFICATION_ID = 3503
+        const val LIVE_NOTIFICATION_ID = 3504
         const val H3_WHITE_IMAGE = "https://www.qcy.com/cdn/shop/files/H3_-1.png?v=1779672583&width=800"
     }
 }

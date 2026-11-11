@@ -85,6 +85,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         appIsVisible = false
+        if (Build.VERSION.SDK_INT < 31 || ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
+            ContextCompat.startForegroundService(this, Intent(this, ConnectionPopupService::class.java).setAction(ConnectionPopupService.ACTION_REFRESH_LIVE_NOTIFICATION))
+        }
         super.onStop()
     }
 
@@ -147,6 +150,8 @@ private fun SonicFlowHome() {
     val pageScrollState = screenScrollStates[tab]
     val preferences = remember(context) { context.getSharedPreferences("sonicflow", android.content.Context.MODE_PRIVATE) }
     var popupEnabled by remember { mutableStateOf(preferences.getBoolean("connection_popup", true)) }
+    var liveNotificationsEnabled by remember { mutableStateOf(preferences.getBoolean("live_notifications", false)) }
+    var materialYouLiveColor by remember { mutableStateOf(preferences.getBoolean("live_notifications_material_you", false)) }
     var autoGameModeEnabled by remember { mutableStateOf(preferences.getBoolean("auto_game_mode", false)) }
     var popupDisplayName by remember { mutableStateOf(preferences.getString("popup_display_name", "") ?: "") }
     var chosenLanguage by remember { mutableStateOf(SonicLocale.selected(context)) }
@@ -224,7 +229,7 @@ private fun SonicFlowHome() {
                 Card(onClick = { showLanguagePicker = true }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
                     Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.Language, null, tint = MaterialTheme.colorScheme.primary); Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) { Text(tx("Idioma"), fontWeight = FontWeight.SemiBold); Text(SonicLocale.languages.first { it.id == chosenLanguage }.label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp) }
+                        Column(Modifier.weight(1f)) { Text(tx("Idioma"), fontWeight = FontWeight.SemiBold); Text(SonicLocale.languages.first { it.id == chosenLanguage }.let { if (it.id == "system") tx("Idioma do sistema") else it.label }, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp) }
                         Icon(Icons.Rounded.ChevronRight, null)
                     }
                 }
@@ -246,6 +251,30 @@ private fun SonicFlowHome() {
                         }
                         PermissionRow(tx("Sobre outros apps"), Settings.canDrawOverlays(context), tx("Concedida"), tx("Não concedida")) {
                             context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")))
+                        }
+                        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(tx("Live notifications"), fontWeight = FontWeight.SemiBold)
+                                    Text(tx("Controles ANC na Now Bar enquanto o fone estiver conectado"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Switch(checked = liveNotificationsEnabled, onCheckedChange = { enabled ->
+                                    liveNotificationsEnabled = enabled
+                                    preferences.edit().putBoolean("live_notifications", enabled).apply()
+                                    ContextCompat.startForegroundService(context, Intent(context, ConnectionPopupService::class.java).setAction(ConnectionPopupService.ACTION_REFRESH_LIVE_NOTIFICATION))
+                                })
+                            }
+                            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(tx("Adaptar ao Material You"), fontWeight = FontWeight.Medium)
+                                    Text(tx("Usar a cor dinâmica do sistema na Now Bar"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Switch(checked = materialYouLiveColor, enabled = liveNotificationsEnabled, onCheckedChange = { enabled ->
+                                    materialYouLiveColor = enabled
+                                    preferences.edit().putBoolean("live_notifications_material_you", enabled).apply()
+                                    ContextCompat.startForegroundService(context, Intent(context, ConnectionPopupService::class.java).setAction(ConnectionPopupService.ACTION_REFRESH_LIVE_NOTIFICATION))
+                                })
+                            }
                         }
                         PermissionRow(tx("Ajustar áudio"), ContextCompat.checkSelfPermission(context, Manifest.permission.MODIFY_AUDIO_SETTINGS) == PackageManager.PERMISSION_GRANTED, tx("Concedida"), tx("Não concedida")) {
                             context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
@@ -283,7 +312,11 @@ private fun SonicFlowHome() {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(popupDisplayName.trim().ifBlank { bluetoothState.deviceName }, fontSize = 23.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
-                        Text(if (!bluetoothState.connected && !bluetoothState.searching) tx("Desconectado") else tx(bluetoothState.message), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(tx(when {
+                            bluetoothState.searching -> "Buscando"
+                            bluetoothState.connected -> "Conectado"
+                            else -> "Desconectado"
+                        }), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Button(modifier = Modifier.animateContentSize(), onClick = {
                         if (permissions.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }) ContextCompat.startForegroundService(context, Intent(context, ConnectionPopupService::class.java).setAction(ConnectionPopupService.ACTION_SCAN))
@@ -293,7 +326,7 @@ private fun SonicFlowHome() {
                             if (searching) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                             else Icon(Icons.Rounded.BluetoothSearching, null)
                         }
-                        Spacer(Modifier.width(6.dp)); Text(if (bluetoothState.searching) "Buscando" else if (bluetoothState.connected) "Reconectar" else "Conectar")
+                        Spacer(Modifier.width(6.dp)); Text(tx(if (bluetoothState.searching) "Buscando" else if (bluetoothState.connected) "Reconectar" else "Conectar"))
                     }
                 }
 
@@ -310,11 +343,11 @@ private fun SonicFlowHome() {
                         if (bluetoothState.connected && bluetoothState.ancMode == 1) {
                             Box {
                                 OutlinedButton(onClick = { sceneMenu = true }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-                                    Text("Cena ANC: ${sceneLabel(bluetoothState.ancScene)}"); Spacer(Modifier.weight(1f)); Icon(Icons.Rounded.ExpandMore, null)
+                                    Text("${tx("Cena ANC")}: ${tx(sceneLabel(bluetoothState.ancScene))}"); Spacer(Modifier.weight(1f)); Icon(Icons.Rounded.ExpandMore, null)
                                 }
                                 DropdownMenu(expanded = sceneMenu, onDismissRequest = { sceneMenu = false }) {
                                     listOf(1 to "Redução de ruído", 2 to "Deslocamento", 3 to "Ambiente interno", 4 to "Redução de vento", 5 to "Adaptativo").forEach { (scene, label) ->
-                                        DropdownMenuItem(text = { Text(label) }, onClick = {
+                                        DropdownMenuItem(text = { Text(tx(label)) }, onClick = {
                                             sceneMenu = false
                                             val value = if (scene in 1..3) bluetoothState.ancStrength else 0
                                             sendMode(context, 1, scene, value)
@@ -323,15 +356,15 @@ private fun SonicFlowHome() {
                                 }
                             }
                             if (bluetoothState.ancScene in 1..3) {
-                                Text("Intensidade ${bluetoothState.ancStrength + 1}/3", style = MaterialTheme.typography.labelLarge)
+                                Text("${tx("Intensidade")} ${bluetoothState.ancStrength + 1}/3", style = MaterialTheme.typography.labelLarge)
                                 var pendingStrength by remember(bluetoothState.ancScene, bluetoothState.ancStrength) { mutableFloatStateOf(bluetoothState.ancStrength.toFloat()) }
                                 Slider(value = pendingStrength, onValueChange = { pendingStrength = it }, onValueChangeFinished = {
                                     sendMode(context, 1, bluetoothState.ancScene, pendingStrength.toInt().coerceIn(0, 2))
                                 }, valueRange = 0f..2f, steps = 1)
                             }
                         }
-                        if (!bluetoothState.connected) Text("Conecte o fone para enviar comandos ANC.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        else Text("Os modos são enviados diretamente pelo Bluetooth LE.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (!bluetoothState.connected) Text(tx("Conecte o fone para enviar comandos ANC."), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        else Text(tx("Os modos são enviados diretamente pelo Bluetooth LE."), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
 
@@ -349,8 +382,8 @@ private fun SonicFlowHome() {
                         Icon(Icons.Rounded.NotificationsActive, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
-                            Text("Pop-up", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                            Text(if (Settings.canDrawOverlays(context)) "Sobre outros apps • parte inferior" else "Toque para permitir sobreposição", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(tx("Pop-up"), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                            Text(tx(if (Settings.canDrawOverlays(context)) "Sobre outros apps • parte inferior" else "Toque para permitir sobreposição"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Switch(checked = popupEnabled, onCheckedChange = { enabled ->
                             popupEnabled = enabled
@@ -429,6 +462,7 @@ private fun SonicFlowHome() {
                         chosenLanguage = language.id
                         preferences.edit().putString("app_language", language.id).apply()
                         showLanguagePicker = false
+                        ContextCompat.startForegroundService(context, Intent(context, ConnectionPopupService::class.java).setAction(ConnectionPopupService.ACTION_REFRESH_LIVE_NOTIFICATION))
                     }, shape = RoundedCornerShape(28.dp), color = if (chosenLanguage == language.id) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow) {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(label, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
@@ -560,23 +594,25 @@ private fun BottomNavPill(icon: ImageVector, label: String, selected: Boolean, m
 
 @Composable
 private fun EqualizerScreen(equalizer: AndroidEqualizer, modifier: Modifier = Modifier, scrollState: androidx.compose.foundation.ScrollState) {
+    val context = LocalContext.current
+    fun tx(value: String) = SonicLocale.text(context, value)
     var selectedProfile by rememberSaveable { mutableStateOf("Personalizado") }
     Column(modifier.verticalScroll(scrollState).padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        ScreenHeader("Equalizador")
+        ScreenHeader(tx("Equalizador"))
         if (equalizer.error != null) {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-                Text("Equalizador indisponível neste aparelho: ${equalizer.error}", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onErrorContainer)
+                Text("${tx("Equalizador indisponível neste aparelho")}: ${equalizer.error}", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onErrorContainer)
             }
         } else if (equalizer.levels.isEmpty()) {
-            Text("O sistema não disponibilizou bandas de equalização.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(tx("O sistema não disponibilizou bandas de equalização."), color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
-            Text("Perfis de som", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+            Text(tx("Perfis de som"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("Neutro", "Graves", "Voz", "Rock", "Clássico", "Podcast", "Agudos").forEach { preset ->
                     FilterChip(selected = selectedProfile == preset, onClick = {
                         equalizer.applyPreset(preset)
                         selectedProfile = preset
-                    }, label = { Text(preset) })
+                    }, label = { Text(tx(preset)) })
                 }
             }
             Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
@@ -591,7 +627,7 @@ private fun EqualizerScreen(equalizer: AndroidEqualizer, modifier: Modifier = Mo
                     }
                 }
             }
-            Text("Os ajustes ficam salvos neste aparelho e aplicados ao áudio do sistema enquanto o SonicFlow estiver aberto.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(tx("Os ajustes ficam salvos neste aparelho e aplicados ao áudio do sistema enquanto o SonicFlow estiver aberto."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(Modifier.height(8.dp))
     }
